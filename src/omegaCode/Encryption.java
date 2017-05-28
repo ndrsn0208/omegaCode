@@ -21,6 +21,10 @@ public class Encryption
 			int n = (int)(Math.random() * 64);
 			indexList[i] = n;
 		}
+		while (indexList[0] == 0 || indexList[0] < 10)
+		{
+			indexList[0] = (int)(Math.random() * 64);
+		}
      	colMain = col;
      	int[][] mgMtrx = new int[64][64];
      	int[] col1 = new int[64];
@@ -59,7 +63,7 @@ public class Encryption
 
      }
      
-     public int[][] shuffle2D(int[][] mat, int row, int col)
+   /*  public int[][] shuffle2D(int[][] mat, int row, int col)
      {
     	 int[][] temp = new int[mat.length][mat[0].length];
     	 int indexR = row;
@@ -87,7 +91,7 @@ public class Encryption
  	    	 indexI++;
  	     }
  	     return temp;
-     }
+     } */
      
      public int[] shuffle1D(int[] arry, int t)
      {
@@ -95,7 +99,7 @@ public class Encryption
     	 for (int i = 0; i < t; i++)
     	 {
     		 int halvLength = (arry.length) / 2;
-			 if ((halvLength - ((double)(arry.length) / 2)) != 0);
+			 if (temp.length % 2 != 0)
 			 {
 				 halvLength += 1;
 			 }
@@ -152,17 +156,17 @@ public class Encryption
     	 int rem = e.getString().length() % 64;
     	 int tempTimes = times;
     	 int[] asciiCache = toAscii(originCode);
-    	 int m = 0;
-    	 while(indexes[m] == 0)
+    	 String s2 = "";
+    	 for (int j : keyIndexes)
     	 {
-    		 m++;
-    	 }
-    	 int shuffleTimes = indexes[m];
+			s2 = s2 + j + ""; 
+		 }
+    	 int shuffleTimes = Integer.parseInt(s2.substring(0, 4));
     	 int[] shuffledInt = shuffle1D(asciiCache, shuffleTimes);
     	 String shuffledString = outPut(shuffledInt);
     	 String stringTemp = shuffledString;
     	 int index = 0;
-    	 while(tempTimes >= 0)
+    	 while(tempTimes > -1)
     	 {
     		 if(tempTimes == 0)
     		 {
@@ -177,15 +181,15 @@ public class Encryption
     					 encryptedCode[index] = asciiTemp[i];
 					 }
     				 else
-    				 {
-    					 encryptedCode[index] = (omegaMtrx[keyIndex][indexCol] % asciiTemp[i]) + 32;
+    				 {   					
+					     encryptedCode[index] = (omegaMtrx[keyIndex][indexCol] - asciiTemp[i]) + 32;   					 
     				 }				
     			     indexCol++;		
     			     index++;
 				 }
     				return encryptedCode;
     		 }
-    		 else
+    		 if(tempTimes > 0)
     		 {
     			 String temp = stringTemp.substring(0,64);
     			 String remString = stringTemp.substring(64);
@@ -202,7 +206,7 @@ public class Encryption
 					 }
     				 else
     				 {
-    					 encryptedCode[index] = (omegaMtrx[keyIndex][indexCol] % asciiTemp[j]) + 32;
+    					 encryptedCode[index] = (omegaMtrx[keyIndex][indexCol] - asciiTemp[j]) + 32;
     				 }					
 					 indexCol++;
 					 index++;
@@ -231,7 +235,7 @@ public class Encryption
 			s1 = s1 + i + "";
 		 }
     	 BigInteger pk = new BigInteger(s1);
-    	 String pk16 = pk.toString(16);
+    	 String pk16 = pk.toString(10);
     	 return pk16;
      }
      
@@ -245,12 +249,19 @@ public class Encryption
     	 String s2 = "";
     	 for (int j : keyIndexes)
     	 {
-			s2 = s2 + j + ""; 
+    		 if (j < 10)
+    		 {
+				s2 = s2 + "0" + j;
+			 }
+    		 else
+    		 {
+    			 s2 = s2 + j + ""; 
+    		 }
 		 }
     	 BigInteger IK = new BigInteger(s2);
     	 BigInteger CK = new BigInteger(s1);
     	 BigInteger pack = IK.multiply(CK);
-    	 String pack16 = pack.toString(16);
+    	 String pack16 = pack.toString(10);
     	 return pack16;
      }
 }
