@@ -1,22 +1,21 @@
 <div align="center">
 
-![Omega Code — a 2017 cipher, made visible](docs/assets/cover.svg)
+![OmegaCode — 128 × 128 Cipher Visualizer](docs/assets/cover.svg)
 
-**An old cryptography experiment. A continuous piece of motion.**
+**See how the same character maps differently at different positions.**
 
-A dependency-free, animated interpretation of the original OmegaCode algorithm.
-Characters separate, intertwine, pass through a living matrix, and gather into a secret.
-Then the paths unravel, returning to the original words.
+A continuous, interactive cipher visualization with a 128 × 128 matrix,
+editable input, and a comparison of repeated-character mappings.
 
-[Open the demo](#try-it) · [How it works](docs/algorithm.md) · [The original Java](src/omegaCode)
+[Open the demo](#try-it) · [Algorithm and formats](docs/algorithm.md) · [Original Java](src/omegaCode)
 
 </div>
 
-![Continuous encryption and decryption, rendered by the same motion engine used in the demo](docs/assets/walkthrough.gif)
+![Cyan inputs pass through the 128×128 matrix and become orange outputs, followed by reverse decryption](docs/assets/walkthrough.gif)
 
 ## Try it
 
-Open **[`demo/index.html`](demo/index.html)** in a modern browser. It works offline: no install, account, API, or build step.
+Open **[`demo/index.html`](demo/index.html)** in a modern browser. It works offline with no install, account, API, or build step.
 
 For a local preview with Node.js 20 or newer:
 
@@ -24,79 +23,91 @@ For a local preview with Node.js 20 or newer:
 npm run preview
 ```
 
-Then open **http://127.0.0.1:4173**. The preview serves only the demo files and listens only on your computer.
+Then open **http://127.0.0.1:4173**. This server exposes only the demo files and listens only on your computer.
 
-1. Enter your text and choose **开始演绎**.
-2. Watch one uninterrupted, 26-second animation. Pause or scrub the timeline whenever you like.
-3. See each glyph keep its identity as its position and value change.
-4. At the result, choose **沿原路返回 · 解密** to watch the reverse journey.
-5. To revisit it later, copy the complete decryption bundle. It includes **the ciphertext and both secret key values**.
+1. Type your text and select **Encrypt text**. The default example, `AAAA AAAA AAAA`, makes repeated-character mappings easy to compare.
+2. Watch the continuous 26-second animation, or pause and drag the timeline.
+3. Use **Track character** to highlight every occurrence of a character. IDs such as `#0` identify original input positions.
+4. Compare the matrix coordinates, arithmetic, and output for each occurrence in the mapping cards.
+5. Select **Decrypt this result** to run the reverse operation, or paste a complete decryption bundle in Decrypt mode.
 
-The interface is in Chinese, with Encode/Decode labels. **␠** denotes a space; **◇** denotes one UTF-16 surrogate unit, such as half of an emoji. Long messages are fully computed, with up to 40 sampled trajectories shown to keep the animation legible.
+The interface is in English. Text and labels are at least 16 px. Cyan represents input values; orange represents output values.
 
-## What you can see
+## Same character, different mapping
 
-| Encode | Decode |
-| --- | --- |
-| Split text into Java-compatible UTF-16 units | Read the ciphertext and its keys |
-| Generate 64 character seeds and 64 indexes | Divide the key pack to recover the indexes |
-| Build the 64 × 64 matrix | Rebuild the same matrix |
-| Move characters through odd/even shuffles | Reverse each character substitution |
-| Trace each matrix lookup and substitution | Interleave the characters back into place |
-| Inspect the ciphertext and key bundle | Compare the recovered text with the original |
+The lookup depends on a character's **position after shuffling**, rather than only on the character itself. For example, with the cipher's substitution rule:
 
-The animation uses actual intermediate results. It continuously choreographs the first two shuffle rounds and the exact final permutation, then moves every visible glyph through its actual matrix lookup. Fast-forwarding uses permutation cycles; it does not approximate the cipher.
+| Input | Selected matrix value | Output |
+| --- | --- | --- |
+| `A` (65) | 100 | `C` (67) |
+| `A` (65) | 110 | `M` (77) |
+| `A` (65) | 50 | `A` (unchanged) |
 
-The same renderer draws both the browser animation and the 24-fps preview above. The preview shortens each direction to 15 seconds. The browser and the unmodified Java implementation have been compared on 11 reference cases.
+Different positions **can** produce different results. Unique results are not guaranteed: matrix values can repeat, and the original rule passes a character through when its value exceeds the selected matrix value. The comparison displays these cases honestly, including collisions and unchanged characters.
 
-## A preserved experiment
+## Two compatible formats
 
-OmegaCode began in **May 2017** as a small Java cryptography project. The original three Java files remain unchanged in `src/omegaCode/`. The interactive edition lives alongside them.
+| | Original format | New demo format |
+| --- | --- | --- |
+| Matrix | 64 × 64 | 128 × 128 |
+| Seeds and indexes | 64 each | 128 each |
+| Packed index width | 2 decimal digits | 3 decimal digits |
+| First index | At least 10 | At least 100 |
+| Bundle identifier | `omega-code-2017` | `omega-code-128-v1` |
 
-This is an **educational cipher**, with its original quirks visible:
+New encryption in the page uses the 128 × 128 extension. Decryption automatically recognizes both formats, including old bundles without a `matrixSize` field. A legacy import is labeled **64 × 64 · legacy** rather than displayed as a 128 × 128 result.
 
-- Random material uses `Math.random()`, not a cryptographic random generator.
+The original three Java files in `src/omegaCode/` remain unchanged. The 128 × 128 format extends the same construction; it is a new version, not a claim that the 2017 program originally used that size.
+
+## Animation and input
+
+The animation uses actual intermediate values. It expands the first two shuffle rounds, then advances to the exact final permutation. Every glyph is mapped through its real matrix cell. Larger matrices are rendered once into a cached layer to keep continuous motion smooth.
+
+Input is limited to 256 UTF-16 character positions. The full message is computed; up to 32 paths are shown for long messages. All repeated-character mapping records remain available with **Show all mappings**. The animation respects reduced-motion preferences.
+
+**␠** represents a space. **◇** represents a UTF-16 surrogate unit, such as half of an emoji. The complete JSON bundle preserves separated surrogate units when copying between applications.
+
+The preview above is rendered at 24 fps by the same motion engine, with each direction shortened to 15 seconds.
+
+## Educational cipher
+
+This is a cryptography experiment, not a secure encryption product:
+
+- Random material uses `Math.random()`.
 - Characters above the selected matrix value pass through unchanged.
-- The substitution schedule repeats every 64 character positions.
-- Non-ASCII units participate in shuffling but pass through the substitution.
-- The algorithm does not authenticate ciphertext or detect a plausible but incorrect key.
-- Control characters can fail to round-trip. The interactive page rejects them and caps input at 256 UTF-16 units.
+- The lookup schedule repeats every 128 positions in the extension, or 64 in legacy mode.
+- Non-ASCII units change position but pass through substitution.
+- Control characters can fail to round-trip, so the page rejects them.
+- The algorithm does not authenticate ciphertext or detect all incorrect keys.
 
-Do not use this algorithm to protect real secrets. The decryption bundle contains the private key; it is a convenient demo format, not a secure sharing format. All demo computation stays in the page, and message/key data is never saved in conversation state or browser storage.
-
-For emoji, the original shuffle can separate a surrogate pair. Use the complete JSON bundle to preserve those units when copying; copying a rendered raw ciphertext through another application may lose them.
+The decryption bundle contains the ciphertext **and both secret key values**. It is a demo convenience, not a safe sharing format. Computation stays in the page; text and keys are not stored in conversation state or browser storage.
 
 ## Verify it
-
-No dependencies are required for the normal test suite:
 
 ```sh
 npm test
 npm run check
 ```
 
-Tests cover all 9,025 printable-ASCII character/key combinations, odd/even shuffling, exact fast-forward, 64-unit boundaries, key parsing, Unicode, bundles, and fixtures produced by the original Java classes. Motion tests verify correct final glyphs, continuous handovers, and trajectories that stay inside mobile and desktop canvases.
+The dependency-free suite covers all 9,025 printable-ASCII character/key combinations, both matrix sizes, index serialization, 64- and 128-position boundaries, Unicode bundles, honest mapping comparisons, continuous motion, and 11 fixtures from the original Java classes.
 
-To compare fresh randomly generated cases against the original code, install JDK 11+ and run:
+With JDK 11+ installed, compare fresh legacy cases against the untouched Java code:
 
 ```sh
 npm run verify:java
 ```
 
-Set `JAVA_HOME` if your JDK is not on `PATH`. This compiles into a temporary directory and removes the generated classes afterwards.
+Set `JAVA_HOME` if your JDK is not on `PATH`. Compilation uses a temporary directory and cleans up afterwards.
 
-## Inside the repository
+## Project layout
 
 ```text
-src/omegaCode/          Original 2017 Java implementation, preserved
-demo/omega.js          Faithful algorithm port and intermediate data
-demo/motion.js         Deterministic trajectories and the shared canvas renderer
-demo/film.js           Playback, timing, input, and local interaction
-demo/index.html        Offline entry point
-demo/*.css             Responsive layout and light/dark themes
-tests/                 Reference fixtures, Java oracle, and regression tests
-scripts/               Local preview, parity check, and inline-preview bundler
-docs/                  Algorithm notes and preview assets
+src/omegaCode/          Original 2017 Java implementation
+demo/omega.js           Legacy and 128×128 cipher formats
+demo/motion.js          Shared animation renderer and trajectories
+demo/film.js            Playback, input, and mapping comparisons
+demo/index.html         Offline entry point
+tests/                  Cipher, compatibility, and motion tests
+scripts/                Preview, verification, and artwork generators
+docs/                   Algorithm notes and preview assets
 ```
-
-The animation respects reduced-motion preferences. Message text and keys never leave the page or enter saved conversation state.

@@ -1,4 +1,4 @@
-/* The 2017 algorithm, including its original substitution rule. No dependencies. */
+/* Legacy 64×64 cipher and the explicitly versioned 128×128 extension. */
 (function (root, factory) {
   "use strict";
   const api = factory();
@@ -8,12 +8,13 @@
   "use strict";
 
   const WIDTH = 64;
+  const DEMO_WIDTH = 128;
   const MIN = 32;
   const MAX = 126;
   const fail = (message) => { throw new Error(message); };
 
   function toUnits(text) {
-    if (typeof text !== "string") fail("请输入文字。");
+    if (typeof text !== "string") fail("Enter a text string.");
     return Array.from({ length: text.length }, (_, i) => text.charCodeAt(i));
   }
 
@@ -26,24 +27,30 @@
   }
 
   function makeMaterial(columns, indexes) {
-    if (!Array.isArray(columns) || columns.length !== WIDTH ||
+    const width = columns?.length;
+    if (!Array.isArray(columns) || ![WIDTH, DEMO_WIDTH].includes(width) ||
         !columns.every((v) => Number.isInteger(v) && v >= MIN && v <= MAX)) {
-      fail("Private key 必须包含 64 个 32–126 之间的字符编码。");
+      fail("The private key must contain 64 or 128 character codes between 32 and 126.");
     }
-    if (!Array.isArray(indexes) || indexes.length !== WIDTH ||
-        !indexes.every((v) => Number.isInteger(v) && v >= 0 && v < WIDTH) ||
-        indexes[0] < 10) {
-      fail("索引必须为 64 个 0–63 之间的整数，首个索引至少为 10。");
+    const indexDigits = width === WIDTH ? 2 : 3;
+    const firstMinimum = 10 ** (indexDigits - 1);
+    if (!Array.isArray(indexes) || indexes.length !== width ||
+        !indexes.every((v) => Number.isInteger(v) && v >= 0 && v < width) ||
+        indexes[0] < firstMinimum) {
+      fail(`Provide ${width} indexes between 0 and ${width - 1}; the first must be at least ${firstMinimum}.`);
     }
     const base = [...columns];
     const shifts = [...indexes];
     const privateKey = base.join("");
-    const indexNumber = shifts.map((v) => String(v).padStart(2, "0")).join("");
+    const indexNumber = shifts.map((v) => String(v).padStart(indexDigits, "0")).join("");
     const shuffleDigits = shifts.join("");
-    const matrix = Array.from({ length: WIDTH }, (_, row) =>
-      Array.from({ length: WIDTH }, (_, col) =>
-        MIN + ((base[(row + shifts[col]) % WIDTH] - MIN + col) % 95)));
+    const matrix = Array.from({ length: width }, (_, row) =>
+      Array.from({ length: width }, (_, col) =>
+        MIN + ((base[(row + shifts[col]) % width] - MIN + col) % 95)));
     return {
+      width,
+      indexDigits,
+      format: width === WIDTH ? "omega-code-2017" : "omega-code-128-v1",
       columns: base,
       indexes: shifts,
       matrix,
@@ -56,46 +63,51 @@
     };
   }
 
-  function generateMaterial(random = Math.random) {
+  function generateMaterial(random = Math.random, width = WIDTH) {
+    if (![WIDTH, DEMO_WIDTH].includes(width)) fail("Supported matrix sizes are 64 and 128.");
     const columns = [];
     const indexes = [];
-    for (let i = 0; i < WIDTH; i++) {
+    for (let i = 0; i < width; i++) {
       columns.push(Math.floor(random() * 95) + MIN);
-      indexes.push(Math.floor(random() * WIDTH));
+      indexes.push(Math.floor(random() * width));
     }
-    while (indexes[0] < 10) indexes[0] = Math.floor(random() * WIDTH);
+    const firstMinimum = width === WIDTH ? 10 : 100;
+    while (indexes[0] < firstMinimum) indexes[0] = Math.floor(random() * width);
     return makeMaterial(columns, indexes);
   }
 
   function parseKeys(keyPackInput, privateKeyInput) {
     if (typeof keyPackInput !== "string" || typeof privateKeyInput !== "string") {
-      fail("请同时提供 Key pack 和 Private key。");
+      fail("Provide both the key pack and the private key.");
     }
     const key = privateKeyInput.trim();
     const pack = keyPackInput.trim();
-    if (!/^[1-9]\d{127,191}$/.test(key)) {
-      fail("Private key 格式不对：需要原版生成的十进制数字串。");
-    }
-    if (!/^[1-9]\d{0,319}$/.test(pack)) {
-      fail("Key pack 格式不对：需要最多 320 位的十进制整数。");
-    }
+    if (!/^[1-9]\d{127,383}$/.test(key)) fail("The private key must be a valid decimal character-code sequence.");
+    if (!/^[1-9]\d{0,767}$/.test(pack)) fail("The key pack must be a positive decimal integer of at most 768 digits.");
     const columns = [];
     let offset = 0;
-    for (let i = 0; i < WIDTH; i++) {
+    while (offset < key.length && columns.length < DEMO_WIDTH) {
       const size = key[offset] === "1" ? 3 : 2;
       columns.push(Number(key.slice(offset, offset + size)));
       offset += size;
     }
-    if (offset !== key.length) fail("Private key 的字符编码数量不对。");
+    const width = columns.length;
+    if (offset !== key.length || ![WIDTH, DEMO_WIDTH].includes(width)) {
+      fail("The private key must decode to exactly 64 or 128 character codes.");
+    }
+    const indexDigits = width === WIDTH ? 2 : 3;
+    if (pack.length > width * (3 + indexDigits)) fail("The key pack is too long for this matrix size.");
     const divisor = BigInt(key);
     const packed = BigInt(pack);
     if (packed % divisor !== 0n) {
-      fail("Key pack 不能被 Private key 整除，请检查这两份密钥是否配套。");
+      fail("The key pack is not divisible by the private key. Check that the keys belong together.");
     }
     const indexNumber = (packed / divisor).toString();
-    if (!/^[1-9]\d{127}$/.test(indexNumber)) fail("解出的索引不是原版的 128 位数字串。");
-    const indexes = Array.from({ length: WIDTH }, (_, i) =>
-      Number(indexNumber.slice(i * 2, i * 2 + 2)));
+    if (indexNumber.length !== width * indexDigits) {
+      fail(`The recovered indexes must contain ${width * indexDigits} digits for a ${width}×${width} matrix.`);
+    }
+    const indexes = Array.from({ length: width }, (_, i) =>
+      Number(indexNumber.slice(i * indexDigits, (i + 1) * indexDigits)));
     return makeMaterial(columns, indexes);
   }
 
@@ -103,7 +115,7 @@
   function orderAt(length, rounds, inverse = false) {
     if (!Number.isInteger(length) || length < 0 ||
         !Number.isSafeInteger(rounds) || rounds < 0) {
-      fail("洗牌长度和轮数必须是非负整数。");
+      fail("Shuffle length and round count must be nonnegative integers.");
     }
     const half = Math.floor(length / 2);
     const permutation = Array.from({ length }, (_, i) => inverse
@@ -137,7 +149,7 @@
   }
 
   function transform(units, material) {
-    return units.map((unit, i) => substitution(unit, material.lookup[i % WIDTH]));
+    return units.map((unit, i) => substitution(unit, material.lookup[i % material.width]));
   }
 
   function encrypt(text, material = generateMaterial()) {
@@ -157,10 +169,11 @@
   }
 
   function packBundle(trace) {
-    if (trace.mode !== "encrypt") fail("只能从加密结果生成解密包。");
+    if (trace.mode !== "encrypt") fail("Create a decryption bundle from an encryption result.");
     // JSON escapes isolated UTF-16 surrogates, so even split emoji round-trip.
     return JSON.stringify({
-      format: "omega-code-2017",
+      format: trace.material.format,
+      matrixSize: trace.material.width,
       ciphertext: trace.output,
       keyPack: trace.material.keyPack,
       privateKey: trace.material.privateKey,
@@ -170,13 +183,33 @@
   function unpackBundle(text) {
     let bundle;
     try { bundle = JSON.parse(text); }
-    catch { fail("解密包不是有效的 JSON。"); }
-    if (!bundle || bundle.format !== "omega-code-2017" ||
+    catch { fail("The decryption bundle is not valid JSON."); }
+    if (!bundle || !["omega-code-2017", "omega-code-128-v1"].includes(bundle.format) ||
         typeof bundle.ciphertext !== "string" ||
         typeof bundle.keyPack !== "string" || typeof bundle.privateKey !== "string") {
-      fail("请粘贴由本演示生成的完整解密包。");
+      fail("Paste a complete OmegaCode decryption bundle.");
     }
-    return { text: bundle.ciphertext, material: parseKeys(bundle.keyPack, bundle.privateKey) };
+    const material = parseKeys(bundle.keyPack, bundle.privateKey);
+    if (bundle.format !== material.format ||
+        (bundle.matrixSize !== undefined && bundle.matrixSize !== material.width)) {
+      fail("The bundle format and matrix size do not match its keys.");
+    }
+    return { text: bundle.ciphertext, material };
+  }
+
+  function mappings(trace) {
+    const n = trace.input.length;
+    const order = orderAt(n, trace.material.shuffleTimes);
+    const records = Array.from({ length: n }, (_, slot) => {
+      const inputPosition = trace.mode === "encrypt" ? order[slot] : slot;
+      const outputPosition = trace.mode === "encrypt" ? slot : order[slot];
+      const column = slot % trace.material.width;
+      const input = trace.input[inputPosition];
+      const key = trace.material.lookup[column];
+      return { inputPosition, outputPosition, input, output: trace.substituted[slot],
+        column, row: trace.material.indexes[column], key, unchanged: input > key };
+    });
+    return records.sort((a, b) => a.inputPosition - b.inputPosition);
   }
 
   function unitLabel(unit) {
@@ -186,7 +219,7 @@
     return String.fromCharCode(unit);
   }
 
-  return Object.freeze({ WIDTH, MIN, MAX, toUnits, fromUnits, makeMaterial,
+  return Object.freeze({ WIDTH, DEMO_WIDTH, MIN, MAX, toUnits, fromUnits, makeMaterial,
     generateMaterial, parseKeys, orderAt, shuffle, substitution, transform,
-    encrypt, decrypt, packBundle, unpackBundle, unitLabel });
+    encrypt, decrypt, packBundle, unpackBundle, mappings, unitLabel });
 });

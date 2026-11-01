@@ -1,105 +1,93 @@
-# Inside OmegaCode
+# OmegaCode: algorithm and formats
 
-This walkthrough describes the 2017 implementation in `src/omegaCode/`, including its unusual choices. The browser demo preserves its arithmetic, key representation, and UTF-16 character model.
+The browser supports the original **64 × 64** algorithm and an explicit **128 × 128 extension**. New encryption in the interface uses 128 × 128. The original Java source remains unchanged.
 
-## 1. Random material and key packaging
+Throughout this document, `N` is the matrix width: 64 or 128.
 
-Generate a base sequence `C` containing 64 integers in `[32, 126]`, and indexes `I` containing 64 integers in `[0, 63]`. Resample the first index until it is at least 10.
+## Random material
 
-- **Private key:** concatenate the decimal character codes in `C`, without separators.
-- **Index number:** concatenate the indexes in `I`, padding each to two digits.
-- **Key pack:** multiply those two large integers.
-- **Shuffle count:** concatenate `I` **without** padding and interpret the first four digits.
+Generate `N` character seeds `C`, each in `[32, 126]`, and `N` indexes `I`, each in `[0, N−1]`.
 
-The two different concatenation rules matter. Reusing the padded representation to choose the shuffle count changes the cipher.
+| Format | Index field width | Minimum first index |
+| --- | --- | --- |
+| `omega-code-2017` | 2 decimal digits | 10 |
+| `omega-code-128-v1` | 3 decimal digits | 100 |
 
-The first index restriction prevents a leading zero from disappearing when the index number is converted to an integer. Character codes are decoded by reading three digits when the next digit is `1`, and two otherwise.
+The first-index rule prevents leading zeros from disappearing when the packed index sequence becomes a big integer. Three digits are necessary in the extension because indexes can reach 127.
 
-This packages shared secret material; it does not establish a public-key cryptosystem.
+The **private key** concatenates the decimal character seeds without separators. Codes beginning with `1` occupy three digits; the others occupy two. The **index number** concatenates the indexes with fixed-width zero padding. The **key pack** multiplies these two big integers.
 
-## 2. The matrix
+The **shuffle count** uses the first four digits of the index sequence **without padding**, preserving the original rule.
 
-For row `r` and column `c`, the constructor computes:
+## Matrix construction
+
+For row `r` and column `c`:
 
 ```text
-M[r][c] = 32 + ((C[(r + I[c]) mod 64] - 32 + c) mod 95)
+M[r][c] = 32 + ((C[(r + I[c]) mod N] - 32 + c) mod 95)
 ```
 
-Each column is a rotated version of the original sequence with its character codes incremented by the column number. Incrementing past 126 wraps back to 32.
+Each column rotates the seed sequence and increments its values by the column number, wrapping within printable ASCII.
 
-Encryption and decryption select only:
+Only one cell is selected per column:
 
 ```text
 K[c] = M[I[c]][c]
-     = 32 + ((C[(2 × I[c]) mod 64] - 32 + c) mod 95)
+     = 32 + ((C[(2 × I[c]) mod N] - 32 + c) mod 95)
 ```
 
-Consequently, only 64 matrix cells are selected per schedule, and only even-numbered positions in `C` can contribute to substitution. Depending on repeated indexes, fewer than 32 distinct seed values may be used.
+This inherited construction selects `N` matrix cells per schedule and uses only even seed indexes: at most 32 distinct seeds for `N = 64`, or 64 for `N = 128`. A larger matrix does not remove that structural limitation.
 
-The animation unfolds the full matrix and highlights each moving glyph's actual lookup. The matrix is generated once per encryption; replaying or scrubbing does not change the keys.
+## Shuffling
 
-## 3. Shuffling
-
-One forward round moves the characters at odd, zero-based indexes ahead of the characters at even indexes:
+One forward round moves odd, zero-based positions ahead of even positions:
 
 ```text
 ABCDEF → BDFACE
 ABCDE  → BDACE
 ```
 
-This operates on the **entire message**, before substitution is split into 64-position groups.
+Shuffling operates on the entire message. Decryption reverses it by splitting after `floor(length / 2)` elements, interleaving the second half into even positions and the first into odd positions.
 
-To reverse it, split the shuffled array after `floor(length / 2)` elements. Interleave the second half into even indexes and the first half into odd indexes.
+The implementation computes permutation powers by following cycles, producing the same result as thousands of repeated rounds. Animation expands the first two rounds and then transitions to the exact final ordering. Interpolated curves are visual motion, not additional cryptographic operations.
 
-The demo computes the final power of this permutation by following its cycles. The original program repeats the same permutation thousands of times. Both methods give the same ordering.
+## Position-dependent substitution
 
-The continuous animation shows the first two rounds and then fast-forwards to the exact final ordering. The counter labels this compression. Curves between those states are visual choreography, not additional cryptographic operations. The single timeline controls time across the whole animation.
-
-Each glyph preserves its identity through the complete journey. For messages longer than 40 UTF-16 units, the renderer samples 40 trajectories while the algorithm still computes every character. The interface labels this sampling.
-
-## 4. Substitution
-
-At message position `j`, choose column `c = j mod 64` and its selected value `K[c]`. For a character code `x`:
+At shuffled message position `j`, use column `c = j mod N`:
 
 ```text
-F(x, K) = x             when x > K
-          K - x + 32   otherwise
+F(x, K[c]) = x                 when x > K[c]
+            K[c] - x + 32     otherwise
 ```
 
-For example, with `K = 100`, `A` (65) becomes `C` (67), while `z` (122) is unchanged.
+Two occurrences of `A` can encounter different values because their shuffled positions select different columns. The mapping comparison reports the original input position, output position, matrix coordinates, selected value, arithmetic, and actual output.
 
-On the printable ASCII interval, applying the same rule twice restores the input. This is why decryption can use the same substitution before reversing the shuffle.
+Different positions do not guarantee different outputs. Cells may repeat, the schedule repeats after `N` positions, and the pass-through branch leaves many input values unchanged. The interface reports the actual count of distinct outputs instead of assuming they are unique.
 
-For codes below 32, the rule can produce a result greater than `K`; the second application then leaves it unchanged. Control characters therefore do not generally round-trip. Tests retain an example of this original defect; the UI rejects those inputs.
+For printable ASCII, the substitution is self-inverse. Decryption applies it first, then reverses the shuffle. Codes below 32 can fail to round-trip; the page rejects control characters.
 
-## 5. Unicode and bundles
+## UTF-16 and bundles
 
-Java `char` values are UTF-16 units. The port intentionally uses `charCodeAt` and `String.fromCharCode`, rather than code-point iteration.
+The Java implementation operates on UTF-16 units. The port uses `charCodeAt` and `String.fromCharCode` to preserve that behavior. Non-ASCII units pass through substitution, and emoji pairs may be split by shuffling.
 
-Chinese characters and other units above 126 pass through substitution unchanged, but can move during shuffling. Emoji commonly contain two surrogate units, which may be separated. The JSON bundle preserves those units, including isolated surrogates, so the same browser implementation can reconstruct the original string.
-
-The bundle is:
+JSON preserves those units, including isolated surrogates:
 
 ```json
 {
-  "format": "omega-code-2017",
+  "format": "omega-code-128-v1",
+  "matrixSize": 128,
   "ciphertext": "...",
   "keyPack": "...",
   "privateKey": "..."
 }
 ```
 
-These are secret-bearing demo bundles. Nothing about packaging the keys with the ciphertext makes the result safe to share.
+Legacy bundles use `omega-code-2017`; the optional `matrixSize` is 64. Old bundles without that field remain supported. Raw keys are also accepted: decoding the private-key seed count identifies the version. The parser validates index ranges, exact division, field lengths, and consistency between the bundle identifier and key material.
 
-## 6. Validation boundaries
+These checks reject malformed inputs but do not authenticate ciphertext or prove a plausible key is correct. Bundles contain secret key material and are intended only for this demo.
 
-The original Java source is unchanged. The browser adds validation around that algorithm:
+## Verification and rendering
 
-- Check that private-key parsing yields exactly 64 codes in the original range.
-- Require exact division of the key pack; never silently truncate a quotient.
-- Require 64 valid recovered indexes and the original first-index restriction.
-- Limit the interactive input to 256 UTF-16 units and reject control characters.
+The Java oracle runs the untouched source and serializes UTF-16 units as numeric arrays. Its 11 reference fixtures verify legacy parity. Separate tests cover 128 × 128 round trips, positions 64/127/128, three-digit indexes, repeated-character mappings, and version mismatch rejection.
 
-These checks can catch malformed inputs, but cannot authenticate a ciphertext or prove a valid-looking key is the right one.
-
-`tests/OmegaReference.java` executes the original classes and outputs numeric UTF-16 arrays, avoiding lossy text encoding for split surrogates. The committed reference fixtures are generated test data, not real credentials. `npm run verify:java` checks newly generated cases against the JavaScript implementation.
+`motion.js` uses `material.width` for matrix coordinates and lookups. It renders up to 32 paths from longer messages and labels that sampling; mapping comparisons include every input occurrence. The matrix is cached in a canvas layer, while characters, paths, and lookup highlights are redrawn continuously.

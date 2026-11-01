@@ -12,7 +12,7 @@
   const segment = (t, a, b) => clamp((t - a) / (b - a));
   const interpolate = (a, b, t) => ({ x: mix(a.x, b.x, t), y: mix(a.y, b.y, t) });
 
-  function createScene(trace, limit = 40) {
+  function createScene(trace, limit = 32) {
     const n = trace.input.length;
     const count = Math.min(limit, n);
     const ids = Array.from({ length: count }, (_, i) => Math.floor(i * n / count));
@@ -30,25 +30,28 @@
       return {
         id, originalRank, slot, finalRank: ranks[3].rank.get(id),
         input: trace.input[id], output: trace.substituted[slot],
-        key: trace.material.lookup[slot % 64],
-        row: trace.material.indexes[slot % 64],
-        column: slot % 64,
+        key: trace.material.lookup[slot % trace.material.width],
+        row: trace.material.indexes[slot % trace.material.width],
+        column: slot % trace.material.width,
       };
     });
-    return { trace, n, count, ranks, entities, inverse };
+    return { trace, n, count, ranks, entities, inverse, focusCode: null };
   }
 
   function geometry(width, height, count, inverse) {
-    const vertical = width < 620;
-    const matrixSize = vertical ? Math.min(176, width * .56) : Math.min(224, width * .27);
-    const centre = { x: width / 2, y: height * .49 };
-    const left = vertical ? { x: width / 2, y: 112 } : { x: width * .13, y: height * .49 };
-    const right = vertical ? { x: width / 2, y: height - 100 } : { x: width * .87, y: height * .49 };
-    const zoneWidth = vertical ? width * .82 : width * .24;
-    const columns = Math.max(1, Math.min(Math.max(1, count), Math.floor(zoneWidth / 25)));
-    const spacingX = Math.min(27, zoneWidth / columns);
-    const spacingY = count > 24 ? 26 : 31;
+    const vertical = width < 700;
+    const matrixSize = vertical ? Math.min(280, width * .74, height * .32)
+      : Math.min(440, width * .44, height - 120);
+    const centre = { x: width / 2, y: height * .5 };
+    const sourceY = Math.min(142, height * .175);
+    const left = vertical ? { x: width / 2, y: sourceY } : { x: width * .12, y: height * .5 };
+    const right = vertical ? { x: width / 2, y: height - sourceY } : { x: width * .88, y: height * .5 };
+    const zoneWidth = vertical ? width * .86 : width * .21;
+    const columns = Math.max(1, Math.min(Math.max(1, count), Math.floor(zoneWidth / 34)));
+    const spacingX = Math.min(40, zoneWidth / columns);
     const rows = Math.max(1, Math.ceil(count / columns));
+    const spacingY = Math.min(count > 24 ? 36 : 48,
+      (vertical ? height * .23 : height - 160) / Math.max(1, rows - 1));
     const point = (rank, origin) => {
       const row = Math.floor(rank / columns);
       const inRow = Math.min(columns, count - row * columns);
@@ -57,7 +60,7 @@
         y: origin.y + (row - (rows - 1) / 2) * spacingY,
       };
     };
-    return { width, height, vertical, matrixSize, centre, point, rows,
+    return { width, height, vertical, matrixSize, centre, point, rows, spacingY,
       source: inverse ? right : left, destination: inverse ? left : right,
       direction: inverse ? -1 : 1 };
   }
@@ -104,14 +107,14 @@
     const layout = geometry(width, height, scene.count, scene.inverse);
     const build = smooth(segment(t, scene.inverse ? .025 : .055, scene.inverse ? .20 : .32));
     const travelStart = scene.inverse ? .17 : .345;
-    const travelSpread = scene.inverse ? .17 : .21;
-    const travelDuration = .29;
+    const travelSpread = scene.inverse ? .27 : .34;
+    const travelDuration = scene.inverse ? .20 : .18;
     const entities = scene.entities.map((entity) => {
       const rank = scene.inverse ? entity.originalRank : entity.finalRank;
       const offset = scene.count <= 1 ? 0 : rank / (scene.count - 1);
       const local = segment(t, travelStart + offset * travelSpread,
         travelStart + offset * travelSpread + travelDuration);
-      const cell = layout.matrixSize / 64;
+      const cell = layout.matrixSize / scene.trace.material.width;
       const gate = {
         x: layout.centre.x - layout.matrixSize / 2 + (entity.column + .5) * cell,
         y: layout.centre.y - layout.matrixSize / 2 + (entity.row + .5) * cell,
@@ -137,18 +140,32 @@
     });
     let active = null;
     for (const entity of entities) {
-      if (entity.local > .27 && entity.local < .73 &&
+      if ((scene.focusCode === null || entity.input === scene.focusCode) &&
+          entity.local > .27 && entity.local < .73 &&
           (!active || Math.abs(entity.local - .5) < Math.abs(active.local - .5))) active = entity;
     }
     return { scene, layout, progress: t, build, entities, active };
   }
 
-  function draw(ctx, frame, palette) {
+  function paintMatrix(ctx, material, size, palette) {
+    const cell = size / material.width;
+    ctx.clearRect(0, 0, size, size);
+    ctx.fillStyle = palette.cyan;
+    for (let row = 0; row < material.width; row++) {
+      for (let col = 0; col < material.width; col++) {
+        ctx.globalAlpha = .12 + (material.matrix[row][col] - 32) / 94 * .36;
+        ctx.fillRect(col * cell, row * cell, Math.max(.5, cell - .6), Math.max(.5, cell - .6));
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function draw(ctx, frame, palette, matrixLayer) {
     const { layout: g, scene, progress: t, build, entities, active } = frame;
-    const { ink, green, gold, soft, line, paper } = palette;
+    const { ink, cyan, orange, soft, line, paper } = palette;
     ctx.clearRect(0, 0, g.width, g.height);
     const mono = 'ui-monospace, "SFMono-Regular", Menlo, monospace';
-    const text = (value, x, y, colour, alpha = 1, size = 11, align = "center", font = mono) => {
+    const text = (value, x, y, colour, alpha = 1, size = 16, align = "center", font = mono) => {
       ctx.globalAlpha = alpha;
       ctx.fillStyle = colour;
       ctx.font = `400 ${size}px ${font}`;
@@ -165,15 +182,17 @@
     };
     const gridX = g.centre.x - g.matrixSize / 2;
     const gridY = g.centre.y - g.matrixSize / 2;
-    const cell = g.matrixSize / 64;
+    const matrixWidth = scene.trace.material.width;
+    const cell = g.matrixSize / matrixWidth;
     const outro = smooth(segment(t, .88, 1));
 
     // Quiet, continuous routes. Their brighter tails are drawn from the same curves.
     for (const entity of entities) {
       if (entity.local <= 0 || entity.local >= 1) continue;
-      ctx.globalAlpha = .13 * Math.sin(Math.PI * entity.local);
-      ctx.strokeStyle = entity.id % 2 ? gold : green;
-      ctx.lineWidth = .75;
+      const focused = scene.focusCode === null || entity.input === scene.focusCode;
+      ctx.globalAlpha = (focused ? .22 : .045) * Math.sin(Math.PI * entity.local);
+      ctx.strokeStyle = entity.changed < .5 ? cyan : orange;
+      ctx.lineWidth = focused ? 1.4 : .8;
       ctx.beginPath();
       for (let j = 0; j <= 32; j++) {
         const point = passage(entity.from, entity.gate, entity.to, j / 32, g, entity.id);
@@ -182,28 +201,36 @@
       ctx.stroke();
     }
 
-    // Sixty-four seeds settle into the matrix as its columns open.
+    // The actual seed count follows the ciphertext's matrix version.
     if (build > 0 && build < 1) {
-      for (let i = 0; i < 64; i++) {
-        const theta = i / 64 * Math.PI * 2 - build * .4;
+      for (let i = 0; i < matrixWidth; i++) {
+        const theta = i / matrixWidth * Math.PI * 2 - build * .4;
         const start = { x: g.centre.x + Math.cos(theta) * g.matrixSize * .66,
           y: g.centre.y + Math.sin(theta) * g.matrixSize * .66 };
         const end = { x: gridX + (i + .5) * cell, y: gridY + cell };
         const point = interpolate(start, end, smooth(build));
-        dot(point.x, point.y, 1.3, i % 2 ? gold : green, Math.sin(Math.PI * build) * .5);
+        dot(point.x, point.y, 1.6, i % 2 ? orange : cyan, Math.sin(Math.PI * build) * .65);
       }
     }
     if (build > 0) {
-      for (let row = 0; row < 64; row++) {
-        for (let col = 0; col < 64; col++) {
-          const reveal = smooth(clamp(build * 1.25 - col / 64 * .25));
-          if (reveal <= 0) continue;
-          const brightness = (scene.trace.material.matrix[row][col] - 32) / 94;
-          const lift = (1 - reveal) * (row % 2 ? -1 : 1) * 13;
-          ctx.globalAlpha = (.08 + brightness * .23) * reveal * (1 - outro * .45);
-          ctx.fillStyle = green;
-          ctx.fillRect(gridX + col * cell, gridY + row * cell + lift,
-            Math.max(.6, cell - .9), Math.max(.6, cell - .9));
+      if (matrixLayer) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(gridX, gridY, g.matrixSize * build, g.matrixSize);
+        ctx.clip();
+        ctx.globalAlpha = (.3 + build * .7) * (1 - outro * .25);
+        ctx.drawImage(matrixLayer, gridX, gridY, g.matrixSize, g.matrixSize);
+        ctx.restore();
+      } else {
+        for (let row = 0; row < matrixWidth; row++) {
+          for (let col = 0; col < matrixWidth; col++) {
+            const reveal = smooth(clamp(build * 1.25 - col / matrixWidth * .25));
+            const brightness = (scene.trace.material.matrix[row][col] - 32) / 94;
+            ctx.globalAlpha = (.12 + brightness * .36) * reveal * (1 - outro * .25);
+            ctx.fillStyle = cyan;
+            ctx.fillRect(gridX + col * cell, gridY + row * cell,
+              Math.max(.5, cell - .6), Math.max(.5, cell - .6));
+          }
         }
       }
     }
@@ -216,33 +243,38 @@
       [gridX, gridY + g.matrixSize, 1, -1], [gridX + g.matrixSize, gridY + g.matrixSize, -1, -1]]) {
       ctx.beginPath(); ctx.moveTo(x, y + dy * corner); ctx.lineTo(x, y); ctx.lineTo(x + dx * corner, y); ctx.stroke();
     }
-    text("OMEGA MATRIX", g.centre.x, gridY - 23, soft, .72 * build, 11);
-    text(active ? `[${active.row}, ${active.column}]  ·  ${active.key}` : "64 × 64",
-      g.centre.x, gridY + g.matrixSize + 23, soft, .72 * build, 11);
+    text(`${matrixWidth} × ${matrixWidth} matrix`, g.centre.x, gridY - 40, ink, build, 18);
+    for (const tick of [0, matrixWidth / 2, matrixWidth - 1]) {
+      text(String(tick), gridX + (tick + .5) * cell, gridY - 16, soft, build, 16);
+    }
+    text(active ? `M[${active.row}, ${active.column}] = ${active.key}` : `${matrixWidth ** 2} values`,
+      g.centre.x, gridY + g.matrixSize + 28, soft, build, 16);
     if (active) {
       const pulse = Math.max(0, 1 - Math.abs(active.local - .5) * 5);
-      ctx.globalAlpha = .18 * pulse;
-      ctx.fillStyle = green;
-      ctx.fillRect(active.gate.x - cell / 2, gridY, cell, g.matrixSize);
-      ctx.fillRect(gridX, active.gate.y - cell / 2, g.matrixSize, cell);
-      dot(active.gate.x, active.gate.y, 9 * pulse + 3, green, .12 * pulse);
-      dot(active.gate.x, active.gate.y, 2.6, green, .8 * pulse);
+      ctx.globalAlpha = .42 * pulse;
+      ctx.fillStyle = orange;
+      ctx.fillRect(active.gate.x - cell / 2, gridY, Math.max(2, cell), g.matrixSize);
+      ctx.fillRect(gridX, active.gate.y - cell / 2, g.matrixSize, Math.max(2, cell));
+      dot(active.gate.x, active.gate.y, 12 * pulse + 4, orange, .2 * pulse);
+      dot(active.gate.x, active.gate.y, 3.5, orange, pulse);
     }
 
-    const labelOffset = (g.rows - 1) * (scene.count > 24 ? 13 : 15.5) + 36;
-    text(scene.inverse ? "CIPHERTEXT" : "PLAINTEXT",
-      g.source.x, g.source.y - labelOffset, soft, .75 * (1 - outro * .5), 11);
-    text(scene.inverse ? "PLAINTEXT" : "CIPHERTEXT",
-      g.destination.x, g.destination.y - labelOffset, soft, .35 + outro * .4, 11);
+    const labelOffset = (g.rows - 1) * g.spacingY / 2 + 44;
+    text(scene.inverse ? "Ciphertext" : "Plaintext",
+      g.source.x, g.source.y - labelOffset, cyan, 1 - outro * .3, 16);
+    text(scene.inverse ? "Plaintext" : "Ciphertext",
+      g.destination.x, g.destination.y - labelOffset, orange, .65 + outro * .35, 16);
 
-    if (!scene.n) text("∅", g.source.x, g.source.y, ink, .65, 28, "center", "Georgia, serif");
+    if (!scene.n) text("∅", g.source.x, g.source.y, ink, .65, 28);
     for (const entity of entities) {
-      const colour = entity.id % 2 ? gold : green;
+      const focused = scene.focusCode === null || scene.focusCode === entity.input;
+      const opacity = focused ? 1 : .22;
+      const colour = entity.changed < .5 ? cyan : orange;
       if (entity.tail.length) {
         for (let j = 1; j < entity.tail.length; j++) {
-          ctx.globalAlpha = (j / entity.tail.length) ** 2 * .55;
+          ctx.globalAlpha = (j / entity.tail.length) ** 2 * .75 * opacity;
           ctx.strokeStyle = colour;
-          ctx.lineWidth = 1.2;
+          ctx.lineWidth = focused ? 2 : 1;
           ctx.beginPath();
           ctx.moveTo(entity.tail[j-1].x, entity.tail[j-1].y);
           ctx.lineTo(entity.tail[j].x, entity.tail[j].y);
@@ -250,25 +282,24 @@
         }
       }
       const pulse = Math.max(0, 1 - Math.abs(entity.local - .5) * 7);
-      const radius = 13 + pulse * 5;
-      dot(entity.position.x, entity.position.y, radius, paper, .9);
-      dot(entity.position.x, entity.position.y, radius, colour, .035 + pulse * .11);
-      const fontSize = (g.width < 380 ? 16 : 19) + pulse * 2;
+      const radius = 17 + pulse * 5;
+      dot(entity.position.x, entity.position.y, radius, paper, .94 * opacity);
+      dot(entity.position.x, entity.position.y, radius, colour, (.055 + pulse * .13) * opacity);
+      const fontSize = 22 + pulse * 2;
       if (entity.changed < 1) {
         text(O.unitLabel(entity.input), entity.position.x, entity.position.y,
-          entity.local > 0 ? colour : ink, 1 - entity.changed, fontSize);
+          cyan, (1 - entity.changed) * opacity, fontSize);
       }
       if (entity.changed > 0) {
         text(O.unitLabel(entity.output), entity.position.x, entity.position.y,
-          entity.local >= 1 ? ink : colour, entity.changed, fontSize);
+          orange, entity.changed * opacity, fontSize);
       }
-      if (active?.id === entity.id) {
-        text(`${entity.input} → ${entity.output}`, entity.position.x,
-          entity.position.y - 27, soft, pulse * .85, 11);
+      if (focused && scene.focusCode !== null) {
+        text(`#${entity.id}`, entity.position.x, entity.position.y + 23, soft, .9, 16);
       }
     }
     ctx.globalAlpha = 1;
   }
 
-  return Object.freeze({ createScene, frameAt, draw, smooth, segment });
+  return Object.freeze({ createScene, frameAt, paintMatrix, draw, smooth, segment });
 });

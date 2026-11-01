@@ -1,8 +1,8 @@
 {
   "name": "omega-code-visualization",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "A continuous, animated visualization of the original 2017 OmegaCode cipher.",
+  "description": "A 128×128 cipher visualizer with repeated-character mappings and legacy OmegaCode compatibility.",
   "scripts": {
     "test": "node --test tests/*.test.cjs",
     "check": "node --check demo/omega.js && node --check demo/motion.js && node --check demo/film.js",

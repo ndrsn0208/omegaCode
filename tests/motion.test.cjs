@@ -12,7 +12,7 @@ test("each animated glyph arrives with the actual cipher or plaintext value", ()
     for (const trace of [encryption, decryption]) {
       const scene = M.createScene(trace);
       const frame = M.frameAt(scene, 1000, 410, 1);
-      assert.equal(frame.entities.length, Math.min(40, trace.input.length));
+      assert.equal(frame.entities.length, Math.min(32, trace.input.length));
       for (const entity of frame.entities) {
         const position = scene.ranks[3].allPositions[entity.id];
         assert.equal(entity.output, trace.output.charCodeAt(position));

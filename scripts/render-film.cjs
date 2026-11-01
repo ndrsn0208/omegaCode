@@ -5,27 +5,33 @@ const path = require("node:path");
 const { createCanvas } = require("@napi-rs/canvas");
 const O = require("../demo/omega.js");
 const M = require("../demo/motion.js");
-const fixture = require("../tests/fixtures/java-reference.json")[3];
-const material = O.parseKeys(fixture.keyPack, fixture.privateKey);
-const encryption = O.encrypt("HELLO, OMEGA!", material);
+const material = O.makeMaterial(
+  Array.from({ length: 128 }, (_, i) => 32 + (i * 29) % 95),
+  Array.from({ length: 128 }, (_, i) => i === 0 ? 123 : (i * 17) % 128),
+);
+const encryption = O.encrypt("AAAA AAAA AAAA", material);
 const traces = [encryption, O.decrypt(encryption.output, material)];
 const output = path.resolve(process.argv[2] || ".artifacts/film");
 fs.mkdirSync(output, { recursive: true });
 const width = 960;
-const height = 550;
+const height = 720;
 const fps = 24;
 const framesPerMode = fps * 15;
 const canvas = createCanvas(width, height);
 const context = canvas.getContext("2d");
-const drawing = createCanvas(width - 80, 350);
+const drawing = createCanvas(width - 80, 480);
 const drawingContext = drawing.getContext("2d");
 const palette = {
-  ink: "#173c32", green: "#297456", gold: "#b27a41",
-  soft: "#6a7b70", line: "#dce3d9", paper: "#f5f6f0",
+  ink: "#152d41", cyan: "#008daf", orange: "#c85c0b",
+  soft: "#4e6577", line: "#d4e2ed", paper: "#f6f9fc",
 };
 let index = 0;
 for (const trace of traces) {
   const scene = M.createScene(trace);
+  scene.focusCode = trace.mode === "encrypt" ? 65 : null;
+  const matrixSize = M.frameAt(scene, width - 80, 480, 0).layout.matrixSize;
+  const matrixLayer = createCanvas(Math.ceil(matrixSize), Math.ceil(matrixSize));
+  M.paintMatrix(matrixLayer.getContext("2d"), material, matrixSize, palette);
   for (let i = 0; i < framesPerMode; i++) {
     const progress = i / (framesPerMode - 1);
     context.fillStyle = palette.paper;
@@ -33,37 +39,42 @@ for (const trace of traces) {
     context.textBaseline = "middle";
     context.textAlign = "left";
     context.fillStyle = palette.ink;
-    context.font = "36px Georgia";
+    context.font = "36px Arial";
     context.fillText("Ω", 40, 42);
-    context.font = "12px Arial";
-    context.fillText("O M E G A   C O D E", 81, 37);
+    context.font = "24px Arial";
+    context.fillText("OmegaCode", 81, 37);
     context.fillStyle = palette.soft;
-    context.font = "11px Arial";
-    context.fillText("CIPHER IN MOTION", 81, 55);
+    context.font = "16px Arial";
+    context.fillText("128 × 128 cipher visualizer", 81, 65);
     context.textAlign = "right";
-    context.fillText(trace.mode === "encrypt" ? "E N C R Y P T" : "D E C R Y P T", width - 40, 43);
-    const frame = M.frameAt(scene, width - 80, 350, progress);
-    M.draw(drawingContext, frame, palette);
+    context.font = "20px Arial";
+    context.fillText(trace.mode === "encrypt" ? "Encrypt" : "Decrypt", width - 40, 43);
+    const frame = M.frameAt(scene, width - 80, 480, progress);
+    M.draw(drawingContext, frame, palette, matrixLayer);
     context.drawImage(drawing, 40, 84);
     context.textAlign = "center";
     context.fillStyle = palette.ink;
-    context.font = "italic 24px Georgia";
+    context.font = "24px Arial";
     const title = trace.mode === "encrypt"
-      ? (progress < .335 ? "Separate. Intertwine." : progress < .87 ? "A quiet transformation." : "A secret, on the other side.")
-      : (progress < .17 ? "Rebuild the same matrix." : progress < .655 ? "Recover every character." : progress < .925 ? "Unravel the paths." : "Back to the beginning.");
-    context.fillText(title, width / 2, 451);
-    context.font = "12px Menlo";
+      ? (progress < .335 ? "Shuffling repeated characters" : progress < .87 ? "Different positions, different lookups" : "Encryption complete")
+      : (progress < .17 ? "Rebuilding the 128 × 128 matrix" : progress < .655 ? "Reversing substitution" : progress < .925 ? "Reversing the shuffle" : "Original text restored");
+    context.fillText(title, width / 2, 600);
+    context.font = "18px Menlo";
     context.fillStyle = palette.soft;
     const detail = frame.active
       ? (frame.active.input > frame.active.key
         ? `${frame.active.input} > ${frame.active.key}   ·   unchanged`
         : `${frame.active.key} − ${frame.active.input} + 32 = ${frame.active.output}`)
-      : (progress >= .925 ? `“${trace.output}”` : "The original 2017 algorithm. Every glyph keeps its identity.");
-    context.fillText(detail, width / 2, 484);
+      : (progress >= .925 ? `“${trace.output}”` : "Cyan: input value   ·   Orange: output value");
+    context.fillText(detail, width / 2, 638);
+    context.font = "18px Arial";
+    const examples = O.mappings(encryption).filter((r) => r.input === 65).slice(0, 3)
+      .map((r) => `A #${r.inputPosition} → ${O.unitLabel(r.output)}`).join("    |    ");
+    context.fillText(examples, width / 2, 675);
     context.fillStyle = palette.line;
-    context.fillRect(40, 519, width - 80, 2);
-    context.fillStyle = palette.green;
-    context.fillRect(40, 519, (width - 80) * progress, 2);
+    context.fillRect(40, 705, width - 80, 3);
+    context.fillStyle = palette.cyan;
+    context.fillRect(40, 705, (width - 80) * progress, 3);
     fs.writeFileSync(path.join(output, `${String(index++).padStart(4, "0")}.png`), canvas.toBuffer("image/png"));
   }
 }
