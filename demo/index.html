@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="A continuous, animated visualization of the original 2017 OmegaCode cipher.">
+  <meta name="color-scheme" content="light dark">
+  <title>Omega Code — Cipher in motion</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext x='7' y='49' font-size='54'%3EΩ%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="standalone.css">
+  <link rel="stylesheet" href="film.css">
+  <script defer src="omega.js"></script>
+  <script defer src="motion.js"></script>
+  <script defer src="film.js"></script>
+</head>
+<body>
+<!-- OMEGA_FRAGMENT_START -->
+<div id="omega-lab">
+  <header class="film-header">
+    <div class="film-wordmark"><span class="film-omega">Ω</span><span>OMEGA CODE<small>CIPHER IN MOTION</small></span></div>
+    <span class="film-date">An experiment, since 2017.</span>
+  </header>
+  <div class="film-intro">
+    <div><div class="film-eyebrow">THE POETRY OF A CIPHER</div><h1>每一个秘密，<em>都有轨迹。</em></h1></div>
+    <div class="film-mode" role="group" aria-label="演绎方向">
+      <button type="button" id="omega-encrypt" aria-pressed="true">加密 <span>Encode</span></button>
+      <button type="button" id="omega-decrypt" aria-pressed="false">解密 <span>Decode</span></button>
+    </div>
+  </div>
+  <form id="omega-form" class="film-form" novalidate>
+    <div class="film-input-line">
+      <label class="film-input-label" for="omega-message" id="omega-input-label">YOUR WORDS</label>
+      <textarea id="omega-message" rows="1" spellcheck="false" aria-describedby="omega-input-hint">HELLO, OMEGA!</textarea>
+      <button class="film-primary" type="submit" id="omega-start">开始演绎 <span aria-hidden="true">↗</span></button>
+    </div>
+    <details id="omega-decode-fields" class="film-key-inputs" hidden>
+      <summary>解密材料 <span>也可以直接在上方粘贴完整解密包</span></summary>
+      <div class="film-key-grid">
+        <label for="omega-keypack">Key pack<textarea id="omega-keypack" rows="3" spellcheck="false"></textarea></label>
+        <label for="omega-private">Private key<textarea id="omega-private" rows="3" spellcheck="false"></textarea></label>
+      </div>
+    </details>
+    <div class="film-input-note"><span id="omega-input-hint">写下一行文字，看它流向另一种形态。</span><span id="omega-count">13 CHARACTERS</span></div>
+    <div id="omega-error" class="film-error" role="alert" hidden></div>
+  </form>
+  <section class="film-theater" aria-label="连续加密动画">
+    <div class="film-scene-head"><span id="omega-direction">PLAINTEXT → CIPHERTEXT</span><span id="omega-live"><i aria-hidden="true"></i>READY TO FLOW</span></div>
+    <canvas id="omega-canvas" role="img" aria-label="字符沿轨迹流经洗牌与矩阵替换，汇聚成密文。"></canvas>
+    <div class="film-narration" aria-live="polite"><div id="omega-caption-title">一行文字，等待出发。</div><div id="omega-caption-detail">按下播放，让字符沿着算法流动。</div></div>
+    <div class="film-readout" id="omega-readout" aria-hidden="true"></div>
+    <div class="film-transport">
+      <button type="button" id="omega-play" class="film-plain">播放</button>
+      <input id="omega-timeline" type="range" min="0" max="1000" step="1" value="0" aria-label="动画时间轴">
+      <span id="omega-time" class="film-time">00:00 / 00:26</span>
+      <button type="button" id="omega-replay" class="film-plain" aria-label="从头重播">重播 ↺</button>
+    </div>
+  </section>
+  <section id="omega-result" class="film-result" aria-label="运算结果">
+    <div class="film-result-top"><span class="film-eyebrow" id="omega-result-label">THE OTHER SIDE</span><span id="omega-match"></span></div>
+    <div id="omega-output" class="film-output">—</div>
+    <div class="film-result-actions">
+      <button type="button" id="omega-transfer" class="film-plain">沿原路返回 · 解密 ↗</button>
+      <button type="button" id="omega-copy" class="film-plain">复制解密包</button>
+      <details class="film-key-details"><summary>查看密钥</summary><div class="film-key-grid"><div><span>KEY PACK</span><p id="omega-result-pack"></p></div><div><span>PRIVATE KEY</span><p id="omega-result-private"></p></div></div></details>
+    </div>
+    <label id="omega-copy-fallback-label" class="film-key-inputs" hidden>复制完整解密包<textarea id="omega-copy-fallback" readonly rows="5"></textarea></label>
+  </section>
+  <footer class="film-footer"><span>2017 年的原始算法。重新看见。</span><span>本地演算 · 实验用途 · 请勿用于真实秘密</span></footer>
+  <div id="omega-announcement" class="film-sr" aria-live="polite"></div>
+</div>
+<!-- OMEGA_FRAGMENT_END -->
+<noscript>请启用 JavaScript 以运行 Omega Code 交互演示。</noscript>
+</body>
+</html>

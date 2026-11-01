@@ -1,0 +1,12 @@
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 28px 32px;
+  background: light-dark(#f5f6f0, #101d17);
+  color: light-dark(#173c32, #e4eee6);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+}
+body > #omega-lab { max-width: 1120px; margin: 0 auto; }
+[hidden] { display: none !important; }
+@media (max-width: 600px) { body { padding: 22px 16px; } }
